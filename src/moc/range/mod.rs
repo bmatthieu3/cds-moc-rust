@@ -65,8 +65,9 @@ pub struct CellAndEdges<T: Idx> {
 }
 
 pub struct CellAndNeighs<T: Idx> {
-  pub uniq: T,
-  pub neigs: OrdinalMap<Cell<T>>,
+  pub cell: Cell<T>,
+  /// Stores the zuniq idx of the neigs
+  pub neigs: OrdinalMap<usize>,
 }
 
 /// A MOC made of (ordered and non-overlaping) ranges.
@@ -630,14 +631,15 @@ impl<T: Idx> RangeMOC<T, Hpx<T>> {
     // since deeper cells have not yet been iterated over.
     // We have already iterated on cell of depth < current cell depth
     // and cell depth == current cell depth && idx < current idx
-    let find_bigger_neig = move |depth: u8, org_idx_t: T, neig_idx_u64: u64| -> Option<Cell<T>> {
+    // return the zuniq idx of the bigger neig
+    let find_bigger_neig = move |depth: u8, org_idx_t: T, neig_idx_u64: u64| -> Option<usize> {
       let neig_idx_t = T::from_u64(neig_idx_u64);
       let neig_zuniq = Hpx::<T>::to_zuniq(depth, neig_idx_t);
       match zuniqs.binary_search(&neig_zuniq) {
-        Ok(_) => {
+        Ok(i) => {
           // Neig is bigger so tag it as neig of org
           if neig_idx_t < org_idx_t {
-            Some(Cell::new(depth, neig_idx_t))
+            Some(i)
           } else {
             None
           }
@@ -647,14 +649,14 @@ impl<T: Idx> RangeMOC<T, Hpx<T>> {
           if let Some((d, h)) = zuniqs.get(i - 1).map(|zuniq| Hpx::<T>::from_zuniq(*zuniq)) {
             if d < depth && (neig_idx_t >> ((depth - d) << 1) as usize) == h {
               // return cell bigger than ord
-              return Some(Cell::new(d, h));
+              return Some(i - 1);
             }
           }
           // Test index i + 1
           if let Some((d, h)) = zuniqs.get(i).map(|zuniq| Hpx::<T>::from_zuniq(*zuniq)) {
             if d < depth && (neig_idx_t >> ((depth - d) << 1) as usize) == h {
               // return cell bigger than ord
-              return Some(Cell::new(d, h));
+              return Some(i);
             }
           }
           // No neighbours found. There might be one but neig is smaller than org
@@ -671,27 +673,27 @@ impl<T: Idx> RangeMOC<T, Hpx<T>> {
 
       let mut neigs = OrdinalMap::new();
       if let Some(idx_neig_u64) = neigs_u64.get(MainWind::NE) {
-        if let Some(neig_cell) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
-          neigs.put(Ordinal::NE, neig_cell);
+        if let Some(neig_cell_idx) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
+          neigs.put(Ordinal::NE, neig_cell_idx);
         }
       }
       if let Some(idx_neig_u64) = neigs_u64.get(MainWind::SE) {
-        if let Some(neig_cell) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
-          neigs.put(Ordinal::SE, neig_cell);
+        if let Some(neig_cell_idx) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
+          neigs.put(Ordinal::SE, neig_cell_idx);
         }
       }
       if let Some(idx_neig_u64) = neigs_u64.get(MainWind::NW) {
-        if let Some(neig_cell) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
-          neigs.put(Ordinal::NW, neig_cell);
+        if let Some(neig_cell_idx) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
+          neigs.put(Ordinal::NW, neig_cell_idx);
         }
       }
       if let Some(idx_neig_u64) = neigs_u64.get(MainWind::SW) {
-        if let Some(neig_cell) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
-          neigs.put(Ordinal::SW, neig_cell);
+        if let Some(neig_cell_idx) = find_bigger_neig(cell.depth, idx, *idx_neig_u64) {
+          neigs.put(Ordinal::SW, neig_cell_idx);
         }
       }
 
-      CellAndNeighs { uniq, neigs }
+      CellAndNeighs { cell, neigs }
     })
   }
 
